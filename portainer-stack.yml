@@ -22,11 +22,20 @@ services:
     networks:
       services-vlan:
         ipv4_address: 10.0.30.80
+      # For upstream containers on the same Docker host, share an internal
+      # bridge and proxy by container name, e.g. [app](http://container:port).
+      # macvlan host isolation silently drops traffic between a macvlan
+      # container and its own host, so the host's LAN IP is unreachable.
+      # Create with: docker network create --internal proxy-net
+      # (--internal: no gateway, so it can't steal the default route)
+      # proxy-net: {}
 
 networks:
   services-vlan:
     external: true
     name: services-vlan
+  # proxy-net:
+  #   external: true
 
 volumes:
   caddy_data:
