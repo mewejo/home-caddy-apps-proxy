@@ -64,6 +64,11 @@ CADDYFILE="/etc/caddy/Caddyfile"
 			"$upstream_host_re" "$name" "$APPS_DOMAIN"
 		case "$url" in
 			https://*)
+				# Caddy 2.11 rewrites Host to the upstream address for https
+				# upstreams; restore transparent pass-through of the client's
+				# Host so apps that compare it against Referer (e.g. FreePBX)
+				# see consistent values.
+				printf '\t\t\theader_up Host {http.request.host}\n'
 				printf '\t\t\ttransport http {\n'
 				printf '\t\t\t\ttls_insecure_skip_verify\n'
 				printf '\t\t\t}\n'

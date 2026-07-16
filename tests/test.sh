@@ -98,8 +98,17 @@ assert_jq "upstream-host Location redirects are rewritten to the public hostname
   '[.. | objects | select(.handler? == "reverse_proxy" and .upstreams[0].dial == "ns1.internal.example.test:8443")][0].headers.response.replace.Location[0]
    | (.search_regexp == "^https?://ns1\\.internal\\.example\\.test(:[0-9]+)?(/.*)?$") and (.replace == "https://ns1.apps.example.test$2")'
 
-assert_jq "request headers pass through untouched (no header_up rewrites)" \
-  '[.. | objects | select(.handler? == "reverse_proxy")] | all(.headers.request == null)'
+# Caddy 2.11 defaults Host to the upstream address for https upstreams, so
+# the generator must explicitly restore the client's Host there; for http
+# upstreams pass-through is the default and no rewrites should exist.
+assert_jq "https upstream restores the client Host header" \
+  '[.. | objects | select(.handler? == "reverse_proxy" and .upstreams[0].dial == "ns1.internal.example.test:8443")][0].headers.request.set.Host == ["{http.request.host}"]'
+
+assert_jq "https upstream has no other request-header rewrites" \
+  '[.. | objects | select(.handler? == "reverse_proxy" and .upstreams[0].dial == "ns1.internal.example.test:8443")][0].headers.request | (.replace == null) and (.set | keys == ["Host"])'
+
+assert_jq "http upstream request headers pass through untouched" \
+  '[.. | objects | select(.handler? == "reverse_proxy" and .upstreams[0].dial == "10.0.0.5:3000")][0].headers.request == null'
 
 assert_jq "http upstream also gets the Location rewrite" \
   '[.. | objects | select(.handler? == "reverse_proxy" and .upstreams[0].dial == "10.0.0.5:3000")][0].headers.response.replace.Location[0].replace == "https://web.apps.example.test$2"'
