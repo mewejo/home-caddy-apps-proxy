@@ -1,0 +1,31 @@
+services:
+  caddy:
+    image: ghcr.io/mewejo/home-caddy-apps-proxy:latest
+    container_name: caddy
+    hostname: caddy
+    restart: unless-stopped
+
+    environment:
+      # Cloudflare API token: Zone:Read + DNS:Edit on the zone.
+      CF_API_TOKEN: ${CF_API_TOKEN}
+      # Apps are served at *.APPS_DOMAIN, e.g. APPS_DOMAIN=apps.example.com
+      APPS_DOMAIN: ${APPS_DOMAIN}
+      # Per-app upstreams, e.g. NS1_UPSTREAM=https://ns1.internal.example.com:443
+      NS1_UPSTREAM: ${NS1_UPSTREAM}
+
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+
+    networks:
+      services-vlan:
+        ipv4_address: 10.0.30.80
+
+networks:
+  services-vlan:
+    external: true
+    name: services-vlan
+
+volumes:
+  caddy_data:
+  caddy_config:

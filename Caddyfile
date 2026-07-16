@@ -1,0 +1,28 @@
+{
+	# Force Let's Encrypt rather than allowing issuer fallback.
+	acme_ca https://acme-v02.api.letsencrypt.org/directory
+
+	# Cloudflare DNS-01 globally, required for the wildcard certificate.
+	acme_dns cloudflare {env.CF_API_TOKEN}
+}
+
+# {$VAR} placeholders are substituted from the container environment when the
+# Caddyfile is parsed, so the domain and upstreams are set per-deployment.
+*.{$APPS_DOMAIN} {
+	@ns1 host ns1.{$APPS_DOMAIN}
+
+	handle @ns1 {
+		# e.g. NS1_UPSTREAM=https://ns1.internal.example.com:443
+		reverse_proxy {$NS1_UPSTREAM} {
+			transport http {
+				# Upstream serves HTTPS but its certificate is not validated.
+				tls_insecure_skip_verify
+			}
+		}
+	}
+
+	# Unmatched hostnames under the wildcard get a 404.
+	handle {
+		respond "Application not configured" 404
+	}
+}
