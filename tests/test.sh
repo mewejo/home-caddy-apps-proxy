@@ -98,13 +98,8 @@ assert_jq "upstream-host Location redirects are rewritten to the public hostname
   '[.. | objects | select(.handler? == "reverse_proxy" and .upstreams[0].dial == "ns1.internal.example.test:8443")][0].headers.response.replace.Location[0]
    | (.search_regexp == "^https?://ns1\\.internal\\.example\\.test(:[0-9]+)?(/.*)?$") and (.replace == "https://ns1.apps.example.test$2")'
 
-assert_jq "public-hostname Referer is rewritten to the upstream origin" \
-  '[.. | objects | select(.handler? == "reverse_proxy" and .upstreams[0].dial == "ns1.internal.example.test:8443")][0].headers.request.set == null and
-   ([.. | objects | select(.handler? == "reverse_proxy" and .upstreams[0].dial == "ns1.internal.example.test:8443")][0].headers.request.replace.Referer[0]
-    | (.search_regexp == "^https?://ns1\\.apps\\.example\\.test(/.*)?$") and (.replace == "https://ns1.internal.example.test:8443$1"))'
-
-assert_jq "public-hostname Origin is rewritten to the upstream origin" \
-  '[.. | objects | select(.handler? == "reverse_proxy" and .upstreams[0].dial == "ns1.internal.example.test:8443")][0].headers.request.replace.Origin[0].replace == "https://ns1.internal.example.test:8443"'
+assert_jq "request headers pass through untouched (no header_up rewrites)" \
+  '[.. | objects | select(.handler? == "reverse_proxy")] | all(.headers.request == null)'
 
 assert_jq "http upstream also gets the Location rewrite" \
   '[.. | objects | select(.handler? == "reverse_proxy" and .upstreams[0].dial == "10.0.0.5:3000")][0].headers.response.replace.Location[0].replace == "https://web.apps.example.test$2"'

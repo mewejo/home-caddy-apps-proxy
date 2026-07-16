@@ -47,25 +47,19 @@ CADDYFILE="/etc/caddy/Caddyfile"
 				;;
 		esac
 
-		# Appliance UIs often only trust their own hostname/IP, so headers
-		# are translated between the public and upstream identities at the
-		# proxy boundary: absolute Location redirects pointing at the
-		# upstream host are rewritten back to the app's public hostname,
-		# and Referer/Origin request headers carrying the public hostname
-		# are rewritten to the upstream's (e.g. FreePBX declines AJAX when
-		# the Referer host doesn't match its canonical server name).
+		# Upstreams that redirect to their own hostname/IP (common for
+		# appliance UIs) would bounce visitors off the public domain, so
+		# absolute Location headers pointing at the upstream host are
+		# rewritten back to the app's public hostname. Request headers
+		# (Host, Referer, Origin) are deliberately passed through untouched:
+		# apps like FreePBX require Referer host == Host header, which the
+		# browser's own headers already satisfy.
 		upstream_host=$(printf '%s' "$url" | sed 's~^[a-z]*://~~; s~[/:].*~~')
 		upstream_host_re=$(printf '%s' "$upstream_host" | sed 's/\./\\./g')
-		upstream_origin=$(printf '%s' "$url" | sed 's~^\([a-z]*://[^/]*\).*~\1~')
-		domain_re=$(printf '%s' "$APPS_DOMAIN" | sed 's/\./\\./g')
 
 		printf '\t@%s host %s.%s\n' "$name" "$name" "$APPS_DOMAIN"
 		printf '\thandle @%s {\n' "$name"
 		printf '\t\treverse_proxy %s {\n' "$url"
-		printf '\t\t\theader_up Referer ^https?://%s\\.%s(/.*)?$ %s$1\n' \
-			"$name" "$domain_re" "$upstream_origin"
-		printf '\t\t\theader_up Origin ^https?://%s\\.%s$ %s\n' \
-			"$name" "$domain_re" "$upstream_origin"
 		printf '\t\t\theader_down Location ^https?://%s(:[0-9]+)?(/.*)?$ https://%s.%s$2\n' \
 			"$upstream_host_re" "$name" "$APPS_DOMAIN"
 		case "$url" in
