@@ -94,6 +94,13 @@ assert_jq "http upstream proxies to the right host and port" \
 assert_jq "http upstream is proxied without TLS" \
   '[.. | objects | select(.handler? == "reverse_proxy" and .upstreams[0].dial == "10.0.0.5:3000")][0] | (.transport.tls? // null) == null'
 
+assert_jq "upstream-host Location redirects are rewritten to the public hostname" \
+  '[.. | objects | select(.handler? == "reverse_proxy" and .upstreams[0].dial == "ns1.internal.example.test:8443")][0].headers.response.replace.Location[0]
+   | (.search_regexp == "^https?://ns1\\.internal\\.example\\.test(:[0-9]+)?(/.*)?$") and (.replace == "https://ns1.apps.example.test$2")'
+
+assert_jq "http upstream also gets the Location rewrite" \
+  '[.. | objects | select(.handler? == "reverse_proxy" and .upstreams[0].dial == "10.0.0.5:3000")][0].headers.response.replace.Location[0].replace == "https://web.apps.example.test$2"'
+
 assert_jq "unmatched hostnames fall through to a 404" \
   '[.. | objects | select(.handler? == "static_response")][0].status_code | tostring == "404"'
 

@@ -47,23 +47,27 @@ CADDYFILE="/etc/caddy/Caddyfile"
 				;;
 		esac
 
+		# Upstreams that redirect to their own hostname/IP (common for
+		# appliance UIs) would bounce visitors off the public domain, so
+		# absolute Location headers pointing at the upstream host are
+		# rewritten back to the app's public hostname.
+		upstream_host=$(printf '%s' "$url" | sed 's~^[a-z]*://~~; s~[/:].*~~')
+		upstream_host_re=$(printf '%s' "$upstream_host" | sed 's/\./\\./g')
+
 		printf '\t@%s host %s.%s\n' "$name" "$name" "$APPS_DOMAIN"
+		printf '\thandle @%s {\n' "$name"
+		printf '\t\treverse_proxy %s {\n' "$url"
+		printf '\t\t\theader_down Location ^https?://%s(:[0-9]+)?(/.*)?$ https://%s.%s$2\n' \
+			"$upstream_host_re" "$name" "$APPS_DOMAIN"
 		case "$url" in
 			https://*)
-				printf '\thandle @%s {\n' "$name"
-				printf '\t\treverse_proxy %s {\n' "$url"
 				printf '\t\t\ttransport http {\n'
 				printf '\t\t\t\ttls_insecure_skip_verify\n'
 				printf '\t\t\t}\n'
-				printf '\t\t}\n'
-				printf '\t}\n'
-				;;
-			*)
-				printf '\thandle @%s {\n' "$name"
-				printf '\t\treverse_proxy %s\n' "$url"
-				printf '\t}\n'
 				;;
 		esac
+		printf '\t\t}\n'
+		printf '\t}\n'
 		printf '\n'
 	done
 
