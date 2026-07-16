@@ -8,4 +8,8 @@ RUN xcaddy build \
 FROM caddy:${CADDY_VERSION}-alpine
 
 COPY --from=builder /usr/bin/caddy /usr/bin/caddy
-COPY Caddyfile /etc/caddy/Caddyfile
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]

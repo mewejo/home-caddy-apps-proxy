@@ -10,8 +10,10 @@ services:
       CF_API_TOKEN: ${CF_API_TOKEN}
       # Apps are served at *.APPS_DOMAIN, e.g. APPS_DOMAIN=apps.example.com
       APPS_DOMAIN: ${APPS_DOMAIN}
-      # Per-app upstreams, e.g. NS1_UPSTREAM=https://ns1.internal.example.com:443
-      NS1_UPSTREAM: ${NS1_UPSTREAM}
+      # Comma-separated [name](upstream) pairs; name is served at
+      # name.APPS_DOMAIN. https upstreams skip certificate verification.
+      # e.g. APPS=[ns1](https://ns1.internal.example.com:443),[web](http://10.0.0.5:3000)
+      APPS: ${APPS}
 
     volumes:
       - caddy_data:/data

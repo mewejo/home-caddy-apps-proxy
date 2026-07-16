@@ -5,10 +5,11 @@ set -uo pipefail
 
 IMAGE="${IMAGE:?Set IMAGE to the image tag under test}"
 
-# Deployment-shaped test fixtures — the {$VAR} placeholders in the Caddyfile
-# are substituted from these when the config is parsed.
+# Deployment-shaped test fixtures — the entrypoint generates the Caddyfile
+# from these at container start. One https upstream (proxied with
+# tls_insecure_skip_verify) and one plain http upstream.
 APPS_DOMAIN="apps.example.test"
-NS1_UPSTREAM="https://ns1.internal.example.test:8443"
+APPS="[ns1](https://ns1.internal.example.test:8443),[web](http://10.0.0.5:3000)"
 # The Cloudflare module format-checks the token (40 chars of [A-Za-z0-9_-])
 # at provision time, so validation needs a format-valid dummy value.
 CF_API_TOKEN="CIDummyToken0000000000000000000000000000"
@@ -17,7 +18,7 @@ run_caddy() {
   docker run --rm \
     -e CF_API_TOKEN="$CF_API_TOKEN" \
     -e APPS_DOMAIN="$APPS_DOMAIN" \
-    -e NS1_UPSTREAM="$NS1_UPSTREAM" \
+    -e APPS="$APPS" \
     "$IMAGE" caddy "$@"
 }
 
@@ -35,12 +36,22 @@ else
   echo "$validate_output" | tail -5 | sed 's/^/       /'
 fi
 
-# --- formatting: Caddyfile must be canonical (caddy fmt clean) ---------------
+# --- generator: rejects malformed APPS entries -------------------------------
+
+if docker run --rm -e CF_API_TOKEN="$CF_API_TOKEN" -e APPS_DOMAIN="$APPS_DOMAIN" \
+    -e APPS="not-a-valid-entry" "$IMAGE" \
+    caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null 2>&1; then
+  fail "malformed APPS entry is rejected"
+else
+  pass "malformed APPS entry is rejected"
+fi
+
+# --- formatting: generated Caddyfile must be canonical (caddy fmt clean) -----
 
 if run_caddy fmt --diff /etc/caddy/Caddyfile >/dev/null 2>&1; then
-  pass "Caddyfile is canonically formatted"
+  pass "generated Caddyfile is canonically formatted"
 else
-  fail "Caddyfile is canonically formatted"
+  fail "generated Caddyfile is canonically formatted"
 fi
 
 # --- behavior: assertions against the adapted JSON config --------------------
@@ -68,11 +79,20 @@ assert_jq "serves the wildcard apps domain" \
 assert_jq "routes ns1.<APPS_DOMAIN>" \
   '[.. | objects | .host? | select(type == "array") | .[]] | index("ns1.apps.example.test")'
 
-assert_jq "ns1 proxies to the NS1_UPSTREAM host and port" \
-  '[.. | objects | select(.handler? == "reverse_proxy")][0].upstreams[0].dial == "ns1.internal.example.test:8443"'
+assert_jq "routes web.<APPS_DOMAIN>" \
+  '[.. | objects | .host? | select(type == "array") | .[]] | index("web.apps.example.test")'
 
-assert_jq "ns1 upstream uses TLS without certificate verification" \
-  '[.. | objects | select(.handler? == "reverse_proxy")][0].transport.tls.insecure_skip_verify == true'
+assert_jq "https upstream proxies to the right host and port" \
+  '[.. | objects | select(.handler? == "reverse_proxy" and .upstreams[0].dial == "ns1.internal.example.test:8443")] | length == 1'
+
+assert_jq "https upstream uses TLS without certificate verification" \
+  '[.. | objects | select(.handler? == "reverse_proxy" and .upstreams[0].dial == "ns1.internal.example.test:8443")][0].transport.tls.insecure_skip_verify == true'
+
+assert_jq "http upstream proxies to the right host and port" \
+  '[.. | objects | select(.handler? == "reverse_proxy" and .upstreams[0].dial == "10.0.0.5:3000")] | length == 1'
+
+assert_jq "http upstream is proxied without TLS" \
+  '[.. | objects | select(.handler? == "reverse_proxy" and .upstreams[0].dial == "10.0.0.5:3000")][0] | (.transport.tls? // null) == null'
 
 assert_jq "unmatched hostnames fall through to a 404" \
   '[.. | objects | select(.handler? == "static_response")][0].status_code | tostring == "404"'
